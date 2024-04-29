@@ -1,0 +1,2 @@
+lab1:
+一开始处理systimes的时候用的是getsystime(sys_id)->times，后来发现这个函数好像后面处理起来很麻烦，不如直接返回一整个数组
