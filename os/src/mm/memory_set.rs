@@ -261,6 +261,86 @@ impl MemorySet {
             asm!("sfence.vma");
         }
     }
+
+    /// Munmap
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        let va_start: VirtAddr = start.into();
+        if !va_start.aligned() {
+            debug!("va_start not aligned!!\n");
+            return -1;
+        }
+
+        // 根据 _port 设置flags的值
+        let mut flags = PTEFlags::from_bits(port as u8).unwrap();
+        if port & 0b1 != 0 {
+            flags |= PTEFlags::R;
+        }
+        if port & 0b10 != 0 {
+            flags |= PTEFlags::W;
+        }
+        if port &0b100 != 0 {
+            flags |= PTEFlags::X;
+        }
+        // 根据要求，如果 _port 高五位不全为0则报错
+        if port &0b11111000 != 0 {
+            debug!("_port high five bit is not all zero!!!\n");
+            return -1;
+        }
+        flags |= PTEFlags::V;
+        flags |= PTEFlags::U;
+
+        // 设置好初始位置和结束位置并且页对齐
+        let va_end: VirtAddr = (start + len).into();
+        let va_end = va_end.ceil();
+
+        let mut va_start: VirtPageNum = va_start.into();
+
+        while va_start != va_end {
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+            if let Some(ppn) = frame_alloc() {
+                self.page_table.map(va_start, ppn.ppn, flags)
+            } else {
+                return -1;
+            }
+            va_start.step();
+        }
+        0
+    }
+
+    /// Munmap
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+
+        let va_start: VirtAddr = start.into();
+        if !va_start.aligned() {
+            debug!("va_start not aligned!!!\n");
+            return -1;
+        }
+
+        let mut va_start: VirtPageNum = va_start.into();
+        let va_end: VirtAddr = (start + len).into();
+        let va_end: VirtPageNum = va_end.ceil();
+
+        while va_start != va_end {
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if !pte.is_valid() {
+                    debug!("this virtual adress area is not valid");
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+
+            self.page_table.unmap(va_start);
+            va_start.step();
+        }
+
+        0
+    }
+
     /// Translate a virtual page number to a page table entry
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)

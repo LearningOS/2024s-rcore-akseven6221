@@ -213,3 +213,16 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
+
+/// into_pa
+pub fn into_paddr<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+
+    let vaddr = VirtAddr::from(ptr as usize);
+    let page_offset = vaddr.page_offset();
+    let vpn = vaddr.floor();
+
+    let mut pa: PhysAddr = page_table.translate(vpn).unwrap().ppn().into();
+    pa.0 += page_offset;
+    pa.get_mut()
+}
